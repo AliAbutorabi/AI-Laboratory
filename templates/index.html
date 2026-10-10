@@ -1,0 +1,331 @@
+{% load static %}
+
+<!doctype html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <title>Puzzle Solver</title>
+
+</head>
+
+
+<body class="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+
+
+<div
+    class="w-full max-w-3xl bg-white rounded-3xl shadow-xl
+           border border-slate-200 overflow-hidden"
+>
+
+
+    <!-- Header -->
+
+    <div
+        class="px-8 py-7
+               bg-gradient-to-r from-blue-600 to-indigo-600
+               text-white"
+    >
+
+        <h1 class="text-3xl font-bold">
+            Puzzle Solver
+        </h1>
+
+        <p class="text-blue-100 mt-1">
+            Create, shuffle and solve your puzzle
+        </p>
+
+    </div>
+
+
+    <div class="p-8">
+
+
+        <form id="csrf-form" class="hidden">
+            {% csrf_token %}
+        </form>
+
+
+        <!-- Puzzle Settings -->
+
+        <div class="mb-8">
+
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">
+                Puzzle Settings
+            </h2>
+
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+
+                <div class="md:col-span-2">
+
+                    <label
+                        for="size"
+                        class="block text-sm font-medium
+                               text-slate-600 mb-2"
+                    >
+                        Puzzle Size
+                    </label>
+
+                    <input
+                        id="size"
+                        type="number"
+                        min="2"
+                        max="10"
+                        value="3"
+                        class="w-full border border-slate-300
+                               rounded-xl px-4 py-3
+                               outline-none
+                               focus:ring-2 focus:ring-blue-500"
+                    >
+
+                </div>
+
+
+                <div class="flex items-end">
+
+                    <button
+                        id="create-button"
+                        type="button"
+                        onclick="createPuzzle()"
+                        class="w-full bg-blue-600 text-white
+                               font-medium py-3 rounded-xl
+                               hover:bg-blue-700
+                               transition
+                               disabled:opacity-50"
+                    >
+                        Create Puzzle
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- Puzzle -->
+
+        <div
+            class="bg-slate-50 rounded-2xl
+                   border border-slate-200
+                   p-6 mb-8"
+        >
+
+            <div
+                class="flex items-center justify-between mb-5"
+            >
+
+                <h2 class="text-lg font-semibold text-slate-800">
+                    Current Puzzle
+                </h2>
+
+
+                <div
+                    class="px-4 py-2 bg-white
+                           border border-slate-200
+                           rounded-xl text-sm"
+                >
+
+                    <span class="text-slate-500">
+                        Checked Nodes:
+                    </span>
+
+                    <span
+                        id="checked-nodes"
+                        class="font-bold text-slate-800 ml-1"
+                    >
+                        0
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="puzzle"
+                class="grid gap-2
+                       w-80 h-80
+                       sm:w-96 sm:h-96
+                       mx-auto"
+            >
+            </div>
+
+        </div>
+
+
+
+        <!-- Shuffle -->
+
+        <div class="mb-8">
+
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">
+                Shuffle
+            </h2>
+
+
+            <div
+                class="flex flex-col sm:flex-row gap-4"
+            >
+
+                <div class="flex-1">
+
+                    <label
+                        for="shuffle-moves"
+                        class="block text-sm font-medium
+                               text-slate-600 mb-2"
+                    >
+                        Number of Moves
+                    </label>
+
+                    <input
+                        id="shuffle-moves"
+                        type="number"
+                        min="1"
+                        value="20"
+                        class="w-full border border-slate-300
+                               rounded-xl px-4 py-3
+                               outline-none
+                               focus:ring-2 focus:ring-slate-500"
+                    >
+
+                </div>
+
+
+                <div class="sm:w-48 flex items-end">
+
+                    <button
+                        id="shuffle-button"
+                        type="button"
+                        onclick="shufflePuzzle()"
+                        class="w-full bg-slate-900
+                               text-white font-medium
+                               py-3 rounded-xl
+                               hover:bg-slate-800
+                               transition
+                               disabled:opacity-50
+                               disabled:cursor-not-allowed"
+                    >
+                        Shuffle Puzzle
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- Algorithm -->
+
+        <div class="mb-6">
+
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">
+                Solving Algorithm
+            </h2>
+
+
+            <label
+                for="algorithm"
+                class="block text-sm font-medium
+                       text-slate-600 mb-2"
+            >
+                Select Algorithm
+            </label>
+
+
+            <select
+                id="algorithm"
+                class="w-full border border-slate-300
+                       rounded-xl px-4 py-3
+                       bg-white outline-none
+                       focus:ring-2 focus:ring-green-500"
+            >
+
+                {% for algorithm in algorithms %}
+
+                    <option value="{{ algorithm.name }}">
+                        {{ algorithm.name }}
+                    </option>
+
+                {% empty %}
+
+                    <option value="">
+                        No algorithms available
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </div>
+
+
+
+        <!-- Solve -->
+
+        <button
+            id="solve-button"
+            type="button"
+            onclick="solvePuzzle()"
+            class="w-full bg-green-600
+                   text-white font-semibold
+                   py-3.5 rounded-xl
+                   hover:bg-green-700
+                   active:scale-[0.99]
+                   transition
+                   disabled:opacity-50
+                   disabled:cursor-not-allowed"
+        >
+            Solve Puzzle
+        </button>
+
+
+
+        <!-- Status -->
+
+        <div
+            class="flex items-center gap-3
+                   bg-blue-50 border border-blue-100
+                   rounded-xl px-4 py-3 mt-6"
+        >
+
+            <div
+                id="status-indicator"
+                class="w-2.5 h-2.5 rounded-full bg-blue-500"
+            >
+            </div>
+
+            <p
+                id="status"
+                class="text-sm text-blue-700"
+            >
+                Puzzle is ready
+            </p>
+
+        </div>
+
+
+    </div>
+
+</div>
+
+
+<script src="{% static 'index.js' %}"></script>
+
+</body>
+
+</html>
