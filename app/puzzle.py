@@ -23,28 +23,23 @@ def create_puzzle(size):
 def shuffle_puzzle(puzzle):
     n = len(puzzle)
 
-    x, y = next(
-        (i, j)
-        for i in range(n)
-        for j in range(n)
-        if puzzle[i][j] is None
-    )
+    x, y = next((i, j) for i in range(n) for j in range(n) if puzzle[i][j] is None)
 
     neighbors = [
-        (x + dx, y + dy)
-        for dx, dy in [
+        (x + direction_x, y + direction_y)
+        for direction_x, direction_y in [
             (-1, 0),
             (1, 0),
             (0, -1),
             (0, 1),
         ]
-        if 0 <= x + dx < n and 0 <= y + dy < n
+        if 0 <= x + direction_x < n and 0 <= y + direction_y < n
     ]
 
-    nx, ny = random.choice(neighbors)
+    direction_x, direction_y = random.choice(neighbors)
 
-    puzzle[x][y], puzzle[nx][ny] = (
-        puzzle[nx][ny],
+    puzzle[x][y], puzzle[direction_x][direction_y] = (
+        puzzle[direction_x][direction_y],
         puzzle[x][y],
     )
 

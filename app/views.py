@@ -5,7 +5,7 @@ from django.shortcuts import render
 
 from .models import Algorithm
 from .puzzle import create_puzzle, shuffle_puzzle
-from .algorithms import bfs_stream
+from .algorithms import bfs_stream, dfs_stream
 
 
 def index(request):
@@ -80,23 +80,15 @@ def solve_stream(request):
     def event_stream():
 
         if algorithm == "Breadth First Search":
-
-            for event in bfs_stream(puzzle):
-
-                yield (f"data: {json.dumps(event)}\n\n")
-
+            solver = bfs_stream(puzzle)
+        elif algorithm == "Depth First Search":
+            solver = dfs_stream(puzzle)
         else:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Unsupported algorithm'})}\n\n"
+            return
 
-            yield (
-                "data: "
-                + json.dumps(
-                    {
-                        "type": "error",
-                        "message": "Unsupported algorithm",
-                    }
-                )
-                + "\n\n"
-            )
+        for event in solver:
+            yield f"data: {json.dumps(event)}\n\n"
 
     response = StreamingHttpResponse(
         event_stream(),

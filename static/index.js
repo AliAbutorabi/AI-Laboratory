@@ -280,7 +280,7 @@ async function shufflePuzzle() {
         updatePuzzle(data);
 
 
-        await delay(250);
+        await delay(10);
     }
 
 
@@ -322,7 +322,7 @@ async function processNodeQueue() {
 
             renderPuzzle();
 
-            await delay(250);
+            await delay(10);
         }
 
 
