@@ -5,7 +5,7 @@ from django.shortcuts import render
 
 from .models import Algorithm
 from .puzzle import create_puzzle, shuffle_puzzle
-from .algorithms import bfs_stream, dfs_stream
+from .algorithms import astar_stream, bfs_stream, dfs_stream
 
 
 def index(request):
@@ -83,6 +83,8 @@ def solve_stream(request):
             solver = bfs_stream(puzzle)
         elif algorithm == "Depth First Search":
             solver = dfs_stream(puzzle)
+        elif algorithm == "A* Search Algorithm":
+            solver = astar_stream(puzzle)
         else:
             yield f"data: {json.dumps({'type': 'error', 'message': 'Unsupported algorithm'})}\n\n"
             return

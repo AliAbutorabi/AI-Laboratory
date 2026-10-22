@@ -1,4 +1,6 @@
 from collections import deque
+from heapq import heappop, heappush
+from itertools import count
 
 
 def neighbors_list(puzzle_size):
@@ -277,6 +279,120 @@ def dfs_stream(initial_puzzle):
         f"DFS FINISHED - NO SOLUTION - NODES CHECKED: {checked_node_count}",
         flush=True,
     )
+
+    yield {
+        "type": "finished",
+        "checked_nodes": checked_node_count,
+        "solution": None,
+    }
+
+
+def astar_stream(initial_puzzle):
+    puzzle_size = len(initial_puzzle)
+    starting_state = tuple(tile for row in initial_puzzle for tile in row)
+    goal_state = tuple(range(1, puzzle_size * puzzle_size)) + (None,)
+    neighbor_positions = neighbors_list(puzzle_size)
+    distances = {
+        tile: tuple(
+            abs(position // puzzle_size - (tile - 1) // puzzle_size)
+            + abs(position % puzzle_size - (tile - 1) % puzzle_size)
+            for position in range(puzzle_size * puzzle_size)
+        )
+        for tile in range(1, puzzle_size * puzzle_size)
+    }
+
+    def heuristic(state):
+        return sum(
+            distances[tile][position]
+            for position, tile in enumerate(state)
+            if tile is not None
+        )
+
+    sequence = count()
+    starting_heuristic = heuristic(starting_state)
+    frontier = [
+        (
+            starting_heuristic,
+            next(sequence),
+            0,
+            starting_state,
+            starting_state.index(None),
+            starting_heuristic,
+        )
+    ]
+    cost_by_state = {starting_state: 0}
+    parent_state_by_state = {starting_state: None}
+    movement_direction_by_state = {}
+    checked_node_count = 0
+
+    while frontier:
+        (
+            _,
+            _,
+            current_cost,
+            current_state,
+            blank_position,
+            current_heuristic,
+        ) = heappop(frontier)
+        if current_cost != cost_by_state[current_state]:
+            continue
+
+        checked_node_count += 1
+        yield {
+            "type": "checked",
+            "state": _state_to_grid(current_state, puzzle_size),
+            "checked_nodes": checked_node_count,
+        }
+        if current_state == goal_state:
+            solution_directions = []
+            backtracking_state = current_state
+            while backtracking_state != starting_state:
+                solution_directions.append(
+                    movement_direction_by_state[backtracking_state]
+                )
+                backtracking_state = parent_state_by_state[backtracking_state]
+            solution_directions.reverse()
+            yield {
+                "type": "solved",
+                "checked_nodes": checked_node_count,
+                "solution": solution_directions,
+                "state": _state_to_grid(current_state, puzzle_size),
+            }
+            return
+
+        for neighbor_blank_position, movement_direction in neighbor_positions[
+            blank_position
+        ]:
+            neighboring_state = list(current_state)
+            tile = neighboring_state[neighbor_blank_position]
+            neighboring_state[blank_position], neighboring_state[
+                neighbor_blank_position
+            ] = tile, None
+            neighboring_state = tuple(neighboring_state)
+            tentative_cost = current_cost + 1
+
+            if tentative_cost >= cost_by_state.get(neighboring_state, float("inf")):
+                continue
+
+            cost_by_state[neighboring_state] = tentative_cost
+            parent_state_by_state[neighboring_state] = current_state
+            movement_direction_by_state[neighboring_state] = movement_direction
+            neighboring_heuristic = (
+                current_heuristic
+                - distances[tile][neighbor_blank_position]
+                + distances[tile][blank_position]
+            )
+            heappush(
+                frontier,
+                (
+                    tentative_cost + neighboring_heuristic,
+                    next(sequence),
+                    tentative_cost,
+                    neighboring_state,
+                    neighbor_blank_position,
+                    neighboring_heuristic,
+                ),
+            )
 
     yield {
         "type": "finished",
