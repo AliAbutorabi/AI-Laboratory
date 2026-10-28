@@ -45,7 +45,7 @@ def _state_to_grid(current_state, puzzle_size):
     ]
 
 
-def bfs_stream(initial_puzzle):
+def bfs_stream(initial_puzzle, goal_puzzle=None):
 
     print("BFS STARTED", flush=True)
 
@@ -55,7 +55,9 @@ def bfs_stream(initial_puzzle):
         tile_value for puzzle_row in initial_puzzle for tile_value in puzzle_row
     )
 
-    goal_state = tuple(range(1, puzzle_size * puzzle_size)) + (None,)
+    goal_state = tuple(
+        tile for row in goal_puzzle for tile in row
+    ) if goal_puzzle else tuple(range(1, puzzle_size * puzzle_size)) + (None,)
 
     neighbor_positions = neighbors_list(puzzle_size)
 
@@ -151,14 +153,16 @@ def bfs_stream(initial_puzzle):
     }
 
 
-def dfs_stream(initial_puzzle):
+def dfs_stream(initial_puzzle, goal_puzzle=None):
     puzzle_size = len(initial_puzzle)
 
     starting_state = tuple(
         tile_value for puzzle_row in initial_puzzle for tile_value in puzzle_row
     )
 
-    goal_state = tuple(range(1, puzzle_size * puzzle_size)) + (None,)
+    goal_state = tuple(
+        tile for row in goal_puzzle for tile in row
+    ) if goal_puzzle else tuple(range(1, puzzle_size * puzzle_size)) + (None,)
 
     neighbor_positions = [[] for position_index in range(puzzle_size * puzzle_size)]
 
@@ -287,18 +291,24 @@ def dfs_stream(initial_puzzle):
     }
 
 
-def astar_stream(initial_puzzle):
+def astar_stream(initial_puzzle, goal_puzzle=None):
     puzzle_size = len(initial_puzzle)
     starting_state = tuple(tile for row in initial_puzzle for tile in row)
-    goal_state = tuple(range(1, puzzle_size * puzzle_size)) + (None,)
+    goal_state = (
+        tuple(tile for row in goal_puzzle for tile in row)
+        if goal_puzzle
+        else tuple(range(1, puzzle_size * puzzle_size)) + (None,)
+    )
     neighbor_positions = neighbors_list(puzzle_size)
+    goal_positions = {tile: position for position, tile in enumerate(goal_state)}
     distances = {
         tile: tuple(
-            abs(position // puzzle_size - (tile - 1) // puzzle_size)
-            + abs(position % puzzle_size - (tile - 1) % puzzle_size)
+            abs(position // puzzle_size - goal_positions[tile] // puzzle_size)
+            + abs(position % puzzle_size - goal_positions[tile] % puzzle_size)
             for position in range(puzzle_size * puzzle_size)
         )
-        for tile in range(1, puzzle_size * puzzle_size)
+        for tile in goal_state
+        if tile is not None
     }
 
     def heuristic(state):

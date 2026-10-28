@@ -20,6 +20,15 @@ def create_puzzle(size):
     return puzzle
 
 
+def random_puzzle(size):
+    tiles = list(range(1, size * size)) + [None]
+    random.shuffle(tiles)
+    return [
+        tiles[row_start : row_start + size]
+        for row_start in range(0, size * size, size)
+    ]
+
+
 def shuffle_puzzle(puzzle):
     n = len(puzzle)
 

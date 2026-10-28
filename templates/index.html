@@ -63,6 +63,24 @@
                 Puzzle Settings
             </h2>
 
+            <label
+                for="setup-mode"
+                class="block text-sm font-medium text-slate-600 mb-2"
+            >
+                Setup Mode
+            </label>
+
+            <select
+                id="setup-mode"
+                onchange="setupModeChanged()"
+                class="w-full border border-slate-300 rounded-xl px-4 py-3
+                       mb-4 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+            >
+                <option value="standard">Standard Mode</option>
+                <option value="manual">Manual Mode</option>
+                <option value="random">Random Mode</option>
+            </select>
+
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -83,6 +101,7 @@
                         min="2"
                         max="10"
                         value="3"
+                        onchange="setupModeChanged()"
                         class="w-full border border-slate-300
                                rounded-xl px-4 py-3
                                outline-none
@@ -108,6 +127,16 @@
                     </button>
 
                 </div>
+
+                <p id="manual-help" class="hidden md:col-span-3 text-sm text-slate-600 mt-4">
+                    Enter each tile number from 1 to n squared minus 1 once.
+                    Leave exactly one cell empty for the blank.
+                </p>
+                <div
+                    id="manual-grid"
+                    class="hidden grid md:col-span-3 gap-2 max-w-md mx-auto mt-3"
+                    aria-label="Manual puzzle setup"
+                ></div>
 
             </div>
 

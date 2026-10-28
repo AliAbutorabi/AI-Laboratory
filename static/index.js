@@ -69,6 +69,56 @@ function updatePuzzle(data) {
 }
 
 
+function setupModeChanged() {
+
+    const isManual =
+        document.getElementById("setup-mode").value === "manual";
+
+    document.getElementById("manual-help").classList.toggle(
+        "hidden",
+        !isManual
+    );
+
+    document.getElementById("manual-grid").classList.toggle(
+        "hidden",
+        !isManual
+    );
+
+    if (isManual) {
+        renderManualGrid();
+    }
+
+}
+
+
+function renderManualGrid() {
+
+    const grid = document.getElementById("manual-grid");
+    const size = Number(document.getElementById("size").value);
+
+    grid.replaceChildren();
+
+    if (!Number.isInteger(size) || size < 2 || size > 10) {
+        return;
+    }
+
+    grid.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
+
+    for (let position = 0; position < size * size; position++) {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "1";
+        input.max = String(size * size - 1);
+        input.step = "1";
+        input.setAttribute("aria-label", `Puzzle cell ${position + 1}`);
+        input.className =
+            "w-full min-w-0 rounded-lg border border-slate-300 px-2 py-3 text-center";
+        grid.appendChild(input);
+    }
+
+}
+
+
 function getCSRFToken() {
 
     return document.querySelector(
@@ -154,6 +204,16 @@ function setControlsDisabled(disabled) {
     ).disabled = disabled;
 
     document.getElementById(
+        "setup-mode"
+    ).disabled = disabled;
+
+    document.querySelectorAll(
+        "#manual-grid input"
+    ).forEach(input => {
+        input.disabled = disabled;
+    });
+
+    document.getElementById(
         "shuffle-moves"
     ).disabled = disabled;
 
@@ -187,6 +247,44 @@ async function createPuzzle() {
     const size =
         document.getElementById("size").value;
 
+    const mode =
+        document.getElementById("setup-mode").value;
+
+    const requestData = { size, mode };
+
+    if (mode === "manual") {
+        const values = Array.from(
+            document.querySelectorAll("#manual-grid input"),
+            input => input.value.trim()
+        );
+        const sizeNumber = Number(size);
+        const expectedTiles = sizeNumber * sizeNumber - 1;
+        const tiles = values.filter(value => value !== "").map(Number);
+
+        if (
+            values.length !== sizeNumber * sizeNumber ||
+            values.filter(value => value === "").length !== 1 ||
+            tiles.some(
+                value => !Number.isInteger(value) || value < 1 || value > expectedTiles
+            ) ||
+            new Set(tiles).size !== expectedTiles
+        ) {
+            setStatus(
+                `Enter each number from 1 to ${expectedTiles} once and leave one cell empty.`,
+                "error"
+            );
+            return;
+        }
+
+        requestData.puzzle = [];
+        for (let row = 0; row < sizeNumber; row++) {
+            requestData.puzzle.push(
+                values.slice(row * sizeNumber, (row + 1) * sizeNumber)
+                    .map(value => value === "" ? null : Number(value))
+            );
+        }
+    }
+
 
     const response =
         await fetch(
@@ -199,15 +297,18 @@ async function createPuzzle() {
                     "X-CSRFToken": getCSRFToken(),
                 },
 
-                body: JSON.stringify({
-                    size: size,
-                }),
+                body: JSON.stringify(requestData),
             }
         );
 
 
     const data =
         await response.json();
+
+    if (!response.ok) {
+        setStatus(data.error || "Unable to create puzzle.", "error");
+        return;
+    }
 
 
     document.getElementById(
