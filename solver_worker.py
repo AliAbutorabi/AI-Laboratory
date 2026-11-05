@@ -1,95 +1,65 @@
-"""Background solver worker.
-
-The original web app streamed every explored node over SSE to the browser.
-Here the generator is consumed inside a QThread instead, and progress is
-throttled to a configurable frame rate so the Qt event loop stays responsive
-even when BFS explores hundreds of thousands of states.
-"""
+"""Run puzzle search in a worker thread and report results through a queue."""
 
 import time
-
-from PySide6.QtCore import QObject, Signal, Slot
 
 import core
 
 
-class SolverWorker(QObject):
-    progress = Signal(object, int)      # grid or None, checked node count
-    solved = Signal(object, int)        # solution directions, checked node count
-    finished = Signal(int)              # no solution, checked node count
-    aborted = Signal(str, int)          # reason, checked node count
-    failed = Signal(str)                # exception text
-    done = Signal()                     # always emitted at the end of run()
+FRAME_DELAY_MS = 28
 
-    def __init__(
-        self,
-        algorithm,
-        puzzle,
-        goal,
-        max_nodes=300000,
-        visualize=True,
-        frame_delay_ms=60,
-        parent=None,
-    ):
-        super().__init__(parent)
+
+class SolverWorker:
+    def __init__(self, algorithm, puzzle, goal, max_nodes, events):
         self.algorithm = algorithm
         self.puzzle = core.copy_puzzle(puzzle)
         self.goal = core.copy_puzzle(goal)
         self.max_nodes = max_nodes
-        self.visualize = visualize
-        self.frame_delay = max(1, frame_delay_ms) / 1000.0
+        self.events = events
 
-    @Slot()
     def run(self):
         generator = None
         checked = 0
         try:
             solver = core.SOLVERS.get(self.algorithm)
             if solver is None:
-                self.failed.emit(f"Unsupported algorithm: {self.algorithm}")
+                self.events.put(
+                    ("failed", f"الگوریتم پشتیبانی نمی‌شود: {self.algorithm}")
+                )
                 return
 
             generator = solver(self.puzzle, self.goal)
-            thread = self.thread()
             last_frame = 0.0
-
             for event in generator:
-                if thread is not None and thread.isInterruptionRequested():
-                    self.aborted.emit("Search cancelled by user.", checked)
-                    return
-
                 kind = event["type"]
                 checked = event.get("checked_nodes", checked)
-
                 if kind == "checked":
                     if checked > self.max_nodes:
-                        self.aborted.emit(
-                            f"Node limit ({self.max_nodes:,}) reached.", checked
+                        self.events.put(
+                            (
+                                "aborted",
+                                f"محدودیت گره‌ها ({self.max_nodes:,}) پر شد.",
+                                checked,
+                            )
                         )
                         return
                     now = time.monotonic()
-                    if now - last_frame >= self.frame_delay:
+                    if now - last_frame >= FRAME_DELAY_MS / 1000:
                         last_frame = now
-                        # In fast mode no grid is transferred to the UI thread.
-                        self.progress.emit(
-                            event["state"] if self.visualize else None, checked
-                        )
-                    continue
-
-                if kind == "solved":
-                    self.solved.emit(event["solution"], checked)
+                        self.events.put(("progress", event["state"], checked))
+                elif kind == "solved":
+                    self.events.put(("solved", event["solution"], checked))
                     return
-
-                if kind == "finished":
-                    self.finished.emit(checked)
+                elif kind == "finished":
+                    self.events.put(("finished", checked))
                     return
-
-                self.failed.emit(f"Unknown solver event: {kind}")
-                return
-
-        except Exception as exc:  # pragma: no cover - defensive
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+                else:
+                    self.events.put(("failed", f"رویداد حل‌گر ناشناخته است: {kind}"))
+                    return
+        except Exception as exc:
+            self.events.put(
+                ("failed", f"خطای داخلی ({type(exc).__name__}): {exc}")
+            )
         finally:
             if generator is not None:
                 generator.close()
-            self.done.emit()
+            self.events.put(("done",))

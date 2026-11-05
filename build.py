@@ -20,6 +20,7 @@ PROJECT = Path(__file__).resolve().parent
 BUILD_DIR = PROJECT / "build"
 DIST_DIR = PROJECT / "dist"
 EXE = DIST_DIR / "PuzzleSolver.exe"
+MAX_EXE_SIZE = 20 * 1024 * 1024
 
 
 def retire_existing_exe():
@@ -55,8 +56,8 @@ def main():
         "--exclude-module=django",
         "--exclude-module=numpy",
         "--exclude-module=PIL",
-        "--exclude-module=tkinter",
         "--exclude-module=matplotlib",
+        "--exclude-module=PySide6",
         "--exclude-module=pytest",
         "--log-level=WARN",
     ]
@@ -75,7 +76,17 @@ def main():
         return 1
 
     if EXE.exists():
-        print(f"OK: {EXE} ({EXE.stat().st_size / 1024 / 1024:.1f} MiB)")
+        size = EXE.stat().st_size
+        if size >= MAX_EXE_SIZE:
+            EXE.unlink()
+            if previous is not None and previous.exists():
+                os.replace(previous, EXE)
+            print(
+                f"Build failed: executable is {size / 1024 / 1024:.1f} MiB; "
+                "the maximum is under 20 MiB."
+            )
+            return 1
+        print(f"OK: {EXE} ({size / 1024 / 1024:.1f} MiB)")
         return 0
     if previous is not None and previous.exists():
         os.replace(previous, EXE)

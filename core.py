@@ -18,9 +18,7 @@ migration does not change any solving behaviour.  Each yielded event is a dict::
 ``solution`` contains the directions in which the BLANK tile moves.
 
 Only the per-node debug ``print`` calls from the original BFS/DFS were removed
-(they flooded stdout on every explored node).  Everything below ``EXTRAS`` is
-new helper code for the desktop UI: solvability checking, board moves and
-solution-path reconstruction.
+(they flooded stdout on every explored node).
 """
 
 from collections import deque
@@ -384,11 +382,6 @@ def shuffle_puzzle(puzzle, previous_blank_position=None):
     return puzzle
 
 
-# ---------------------------------------------------------------------------
-# EXTRAS: helpers used by the desktop UI
-# ---------------------------------------------------------------------------
-
-
 def copy_puzzle(puzzle):
     return [row.copy() for row in puzzle]
 
@@ -399,100 +392,3 @@ def blank_position(puzzle):
             if tile is None:
                 return row_index, column_index
     raise ValueError("Puzzle has no blank tile")
-
-
-def apply_move(puzzle, direction):
-    """Return a new board after moving the blank in ``direction``.
-
-    Returns None when the move would leave the board.  Directions describe the
-    movement of the blank, exactly like the ``solution`` lists from the solvers.
-    """
-    size = len(puzzle)
-    x, y = blank_position(puzzle)
-    deltas = {
-        "up": (-1, 0),
-        "down": (1, 0),
-        "left": (0, -1),
-        "right": (0, 1),
-    }
-    dx, dy = deltas[direction]
-    nx, ny = x + dx, y + dy
-    if not (0 <= nx < size and 0 <= ny < size):
-        return None
-    result = copy_puzzle(puzzle)
-    result[x][y], result[nx][ny] = result[nx][ny], result[x][y]
-    return result
-
-
-def move_for_tile_click(puzzle, row, column):
-    """Direction that moves the blank when tile (row, column) is clicked."""
-    x, y = blank_position(puzzle)
-    if row == x and column == y:
-        return None
-    if row == x - 1 and column == y:
-        return "up"
-    if row == x + 1 and column == y:
-        return "down"
-    if row == x and column == y - 1:
-        return "left"
-    if row == x and column == y + 1:
-        return "right"
-    return None
-
-
-def solution_states(start_puzzle, directions):
-    """Full board sequence: start, after move 1, ..., goal."""
-    states = [copy_puzzle(start_puzzle)]
-    current = copy_puzzle(start_puzzle)
-    for direction in directions:
-        current = apply_move(current, direction)
-        states.append(copy_puzzle(current))
-    return states
-
-
-def is_solvable(puzzle, goal=None):
-    """Generalised solvability test that also works for non-canonical goals.
-
-    A blank move is one transposition of the full tile permutation (which flips
-    its parity) and also flips the checkerboard colour of the blank cell.  Hence
-    ``parity(permutation) XOR colour(blank)`` is invariant.  Comparing the
-    current arrangement with the goal gives a condition that covers odd and
-    even board sizes alike.
-    """
-    size = len(puzzle)
-    goal = goal if goal is not None else create_puzzle(size)
-    start_flat = [tile for row in puzzle for tile in row]
-    goal_flat = [tile for row in goal for tile in row]
-    if sorted(map(str, start_flat)) != sorted(map(str, goal_flat)):
-        return False
-
-    goal_index = {tile: index for index, tile in enumerate(goal_flat)}
-    permutation = [goal_index[tile] for tile in start_flat]
-    inversions = 0
-    for i in range(len(permutation)):
-        for j in range(i + 1, len(permutation)):
-            if permutation[i] > permutation[j]:
-                inversions += 1
-    parity = inversions % 2
-    bx, by = blank_position(puzzle)
-    gx, gy = blank_position(goal)
-    colour_difference = ((bx + by) - (gx + gy)) % 2
-    return parity == colour_difference
-
-
-def validate_puzzle(puzzle, size):
-    """Replicates the manual-mode validation of ``views.create``."""
-    expected_tiles = set(range(1, size * size)) | {None}
-    if (
-        not isinstance(puzzle, list)
-        or len(puzzle) != size
-        or any(not isinstance(row, list) or len(row) != size for row in puzzle)
-        or any(
-            type(tile) is not int and tile is not None
-            for row in puzzle
-            for tile in row
-        )
-        or {tile for row in puzzle for tile in row} != expected_tiles
-    ):
-        return False
-    return True

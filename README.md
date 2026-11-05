@@ -1,7 +1,9 @@
-# Puzzle Solver (minimal)
+# حل‌کننده پازل
 
-Run:      python main.py
-Build:    python build.py   ->  dist/PuzzleSolver.exe
+اجرا: `python main.py`
 
-Plain Qt widgets, no custom UI. Logic: core.py, backend.py, solver_worker.py
-(both build/ and dist/ are created inside this project folder).
+ساخت فایل اجرایی: `python build.py` ← `dist/PuzzleSolver.exe`
+
+رابط با Tkinter داخلی پایتون ساخته شده تا فایل اجرایی مستقل کمتر از ۲۰
+مگابایت بماند. منطق حل در `core.py`، `backend.py` و `solver_worker.py`
+قرار دارد. پوشه‌های `build/` و `dist/` کنار همین پروژه ساخته می‌شوند.
