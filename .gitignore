@@ -3,3 +3,8 @@
 *.pyc
 __pycache__/
 .env
+build/
+dist/
+PuzzleSolver.spec
+.venv/
+.workbuddy-ai/
