@@ -1,10 +1,4 @@
-"""Background solver worker.
-
-The original web app streamed every explored node over SSE to the browser.
-Here the generator is consumed inside a QThread instead, and progress is
-throttled to a configurable frame rate so the Qt event loop stays responsive
-even when BFS explores hundreds of thousands of states.
-"""
+"""Run a puzzle search off the UI thread and report periodic progress."""
 
 import time
 
@@ -13,8 +7,11 @@ from PySide6.QtCore import QObject, Signal, Slot
 import core
 
 
+FRAME_DELAY_MS = 28
+
+
 class SolverWorker(QObject):
-    progress = Signal(object, int)      # grid or None, checked node count
+    progress = Signal(object, int)      # grid and checked node count
     solved = Signal(object, int)        # solution directions, checked node count
     finished = Signal(int)              # no solution, checked node count
     aborted = Signal(str, int)          # reason, checked node count
@@ -27,8 +24,6 @@ class SolverWorker(QObject):
         puzzle,
         goal,
         max_nodes=300000,
-        visualize=True,
-        frame_delay_ms=60,
         parent=None,
     ):
         super().__init__(parent)
@@ -36,8 +31,7 @@ class SolverWorker(QObject):
         self.puzzle = core.copy_puzzle(puzzle)
         self.goal = core.copy_puzzle(goal)
         self.max_nodes = max_nodes
-        self.visualize = visualize
-        self.frame_delay = max(1, frame_delay_ms) / 1000.0
+        self.frame_delay = FRAME_DELAY_MS / 1000.0
 
     @Slot()
     def run(self):
@@ -46,7 +40,7 @@ class SolverWorker(QObject):
         try:
             solver = core.SOLVERS.get(self.algorithm)
             if solver is None:
-                self.failed.emit(f"Unsupported algorithm: {self.algorithm}")
+                self.failed.emit(f"الگوریتم پشتیبانی نمی‌شود: {self.algorithm}")
                 return
 
             generator = solver(self.puzzle, self.goal)
@@ -55,7 +49,7 @@ class SolverWorker(QObject):
 
             for event in generator:
                 if thread is not None and thread.isInterruptionRequested():
-                    self.aborted.emit("Search cancelled by user.", checked)
+                    self.aborted.emit("جست‌وجو به‌درخواست کاربر لغو شد.", checked)
                     return
 
                 kind = event["type"]
@@ -64,16 +58,13 @@ class SolverWorker(QObject):
                 if kind == "checked":
                     if checked > self.max_nodes:
                         self.aborted.emit(
-                            f"Node limit ({self.max_nodes:,}) reached.", checked
+                            f"محدودیت گره‌ها ({self.max_nodes:,}) پر شد.", checked
                         )
                         return
                     now = time.monotonic()
                     if now - last_frame >= self.frame_delay:
                         last_frame = now
-                        # In fast mode no grid is transferred to the UI thread.
-                        self.progress.emit(
-                            event["state"] if self.visualize else None, checked
-                        )
+                        self.progress.emit(event["state"], checked)
                     continue
 
                 if kind == "solved":
@@ -84,11 +75,11 @@ class SolverWorker(QObject):
                     self.finished.emit(checked)
                     return
 
-                self.failed.emit(f"Unknown solver event: {kind}")
+                self.failed.emit(f"رویداد حل‌گر ناشناخته است: {kind}")
                 return
 
         except Exception as exc:  # pragma: no cover - defensive
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            self.failed.emit(f"خطای داخلی ({type(exc).__name__}): {exc}")
         finally:
             if generator is not None:
                 generator.close()
