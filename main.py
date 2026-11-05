@@ -8,8 +8,8 @@ import sys
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QComboBox, QSpinBox,
-    QCheckBox, QSlider, QPlainTextEdit, QMessageBox, QGridLayout,
-    QHBoxLayout, QVBoxLayout,
+    QCheckBox, QSlider, QPlainTextEdit, QMessageBox, QGroupBox,
+    QGridLayout, QHBoxLayout, QVBoxLayout, QFormLayout,
 )
 
 from backend import PuzzleBackend
@@ -20,71 +20,111 @@ class Window(QWidget):
         super().__init__()
         self.b = PuzzleBackend()
         self.setWindowTitle("Puzzle Solver")
+        self.setMinimumSize(760, 620)
+        self.resize(800, 650)
         self._dialog = False
-        root = QVBoxLayout(self)
 
-        row = QHBoxLayout()
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(10)
+
+        # ------------------------------------------------------------ setup
+        setup = QGroupBox("Puzzle")
+        row = QHBoxLayout(setup)
+        row.setContentsMargins(10, 12, 10, 10)
+        row.setSpacing(8)
         self.size = QSpinBox()
         self.size.setRange(2, 10)
+        self.size.setFixedWidth(100)
         self.size.setValue(self.b.puzzleSize)
         create = QPushButton("Create Puzzle")
         self.shuffles = QSpinBox()
         self.shuffles.setRange(1, 2000)
+        self.shuffles.setFixedWidth(100)
         self.shuffles.setValue(self.b.shuffleMoves)
         shuffle = QPushButton("Shuffle")
-        for w in (QLabel("Size"), self.size, create,
-                  QLabel("Shuffle moves"), self.shuffles, shuffle):
-            row.addWidget(w)
-        root.addLayout(row)
+        for widget in (QLabel("Size"), self.size, create,
+                       QLabel("Shuffle moves"), self.shuffles, shuffle):
+            row.addWidget(widget)
+        row.addStretch(1)
+        root.addWidget(setup)
 
-        row = QHBoxLayout()
+        # ----------------------------------------------------------- search
+        search = QGroupBox("Search")
+        row = QHBoxLayout(search)
+        row.setContentsMargins(10, 12, 10, 10)
+        row.setSpacing(8)
         self.algorithm = QComboBox()
         self.algorithm.addItems(self.b.algorithms)
         self.algorithm.setCurrentIndex(self.b.algorithmIndex)
+        self.algorithm.setMinimumWidth(180)
         self.live = QCheckBox("Live visualization")
         self.live.setChecked(self.b.liveVisualization)
         self.delay = QSpinBox()
         self.delay.setRange(10, 400)
+        self.delay.setFixedWidth(100)
         self.delay.setValue(self.b.animationDelay)
         self.nodeLimit = QSpinBox()
         self.nodeLimit.setRange(1000, 5000000)
         self.nodeLimit.setSingleStep(50000)
+        self.nodeLimit.setFixedWidth(120)
         self.nodeLimit.setValue(self.b.nodeLimit)
-        for w in (QLabel("Algorithm"), self.algorithm, self.live,
-                  QLabel("Delay ms"), self.delay,
-                  QLabel("Node limit"), self.nodeLimit):
-            row.addWidget(w)
-        root.addLayout(row)
+        for widget in (QLabel("Algorithm"), self.algorithm, self.live,
+                       QLabel("Delay (ms)"), self.delay,
+                       QLabel("Node limit"), self.nodeLimit):
+            row.addWidget(widget)
+        row.addStretch(1)
+        root.addWidget(search)
 
-        body = QHBoxLayout()
+        # -------------------------------------------------- board + readouts
+        boardBox = QGroupBox("Board")
+        body = QHBoxLayout(boardBox)
+        body.setContentsMargins(10, 12, 10, 10)
+        body.setSpacing(16)
+
         grid = QGridLayout()
+        grid.setSpacing(2)
         self.cells = []
         for r in range(10):
             line = []
             for c in range(10):
                 button = QPushButton()
-                button.setFixedSize(46, 36)
+                button.setFixedSize(40, 34)
                 button.clicked.connect(
                     lambda _checked=False, r=r, c=c: self.b.moveTile(r, c)
                 )
                 grid.addWidget(button, r, c)
                 line.append(button)
             self.cells.append(line)
-        body.addLayout(grid)
 
-        info = QVBoxLayout()
+        boardSide = QHBoxLayout()
+        boardSide.addStretch(1)
+        boardSide.addLayout(grid)
+        boardSide.addStretch(1)
+        body.addLayout(boardSide, 3)
+
         self.status = QLabel()
         self.nodes = QLabel()
         self.moves = QLabel()
         self.solvable = QLabel()
         for label in (self.status, self.nodes, self.moves, self.solvable):
             label.setWordWrap(True)
-            info.addWidget(label)
-        info.addStretch(1)
-        body.addLayout(info)
-        root.addLayout(body)
+        info = QFormLayout()
+        info.setSpacing(8)
+        info.addRow("Status:", self.status)
+        info.addRow("Checked nodes:", self.nodes)
+        info.addRow("Manual moves:", self.moves)
+        info.addRow("Solvable:", self.solvable)
+        body.addLayout(info, 2)
+        root.addWidget(boardBox, 1)
 
+        # ---------------------------------------------------------- actions
+        actions = QGroupBox("Solve / Playback")
+        column = QVBoxLayout(actions)
+        column.setContentsMargins(10, 12, 10, 10)
+        column.setSpacing(8)
         row = QHBoxLayout()
+        row.setSpacing(6)
         self.solve = QPushButton("Solve Puzzle")
         self.stop = QPushButton("Stop")
         first = QPushButton("|<")
@@ -92,17 +132,30 @@ class Window(QWidget):
         self.play = QPushButton("Play")
         following = QPushButton(">")
         last = QPushButton(">|")
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        for w in (self.solve, self.stop, first, previous, self.play,
-                  following, last, self.slider):
-            row.addWidget(w)
-        root.addLayout(row)
+        for button in (first, previous, self.play, following, last):
+            button.setFixedWidth(48)
+        self.play.setFixedWidth(64)
+        for widget in (self.solve, self.stop, first, previous, self.play,
+                       following, last):
+            row.addWidget(widget)
+        row.addStretch(1)
+        column.addLayout(row)
 
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        column.addWidget(self.slider)
+        root.addWidget(actions)
+
+        # ---------------------------------------------------------- solution
+        solutionBox = QGroupBox("Solution")
+        column = QVBoxLayout(solutionBox)
+        column.setContentsMargins(10, 12, 10, 10)
         self.solution = QPlainTextEdit()
         self.solution.setReadOnly(True)
-        self.solution.setMaximumHeight(110)
-        root.addWidget(self.solution)
+        self.solution.setFixedHeight(90)
+        column.addWidget(self.solution)
+        root.addWidget(solutionBox)
 
+        # ----------------------------------------------------------- wiring
         create.clicked.connect(
             lambda: (self.b.setPuzzleSize(self.size.value()),
                      self.b.createPuzzle())
@@ -160,10 +213,10 @@ class Window(QWidget):
                 if r < size and c < size:
                     cell.setText(board[r][c])
 
-        self.status.setText("Status: " + b.statusText)
-        self.nodes.setText("Checked nodes: " + str(b.checkedNodes))
-        self.moves.setText("Manual moves: " + str(b.manualMoves))
-        self.solvable.setText("Solvable: " + ("yes" if b.solvable else "no"))
+        self.status.setText(b.statusText)
+        self.nodes.setText("{:,}".format(b.checkedNodes))
+        self.moves.setText(str(b.manualMoves))
+        self.solvable.setText("yes" if b.solvable else "no")
         text = b.solutionText
         if self.solution.toPlainText() != text:
             self.solution.setPlainText(text)
@@ -174,6 +227,8 @@ class Window(QWidget):
         self.slider.blockSignals(False)
         self.solve.setEnabled(not b.busy)
         self.stop.setEnabled(b.stopEnabled)
+        self.slider.setEnabled(b.playbackAvailable)
+        self.play.setEnabled(b.playbackAvailable)
         self.play.setText("Pause" if b.playing else "Play")
         self.checkDialogs()
 
