@@ -1,251 +1,204 @@
-"""Puzzle Solver - Windows desktop edition (PySide6 / Qt Quick).
+"""Puzzle Solver - minimal, unstyled front end.
 
-The presentation layer is QML (``ui/``); all puzzle state, algorithms and the
-threaded solver live in Python (``core.py``, ``backend.py``,
-``solver_worker.py``).  The two layers communicate through QObject properties,
-signals/slots and two QAbstractListModel board models registered as QML
-context properties.
-
-Entry point: ``python desktop/main.py``  (or the bundled PuzzleSolver.exe).
-
-Development / verification flags:
-    --selftest              headless algorithm verification
-    --smoke-ui              headless QML load + backend smoke test
-    --screenshot PATH       launch, grab the window and exit
+core.py, backend.py and solver_worker.py are used unchanged.  This file only
+wires stock Qt widgets to the backend's slots and reads its properties.
 """
-
-import json
-import os
 import sys
-import tempfile
-import traceback
 
-# Works both when launched from source and from the PyInstaller bundle.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QLabel, QPushButton, QComboBox, QSpinBox,
+    QCheckBox, QSlider, QPlainTextEdit, QMessageBox, QGridLayout,
+    QHBoxLayout, QVBoxLayout,
+)
 
-from PySide6.QtCore import QCoreApplication, QTimer, QUrl
-from PySide6.QtGui import QFontDatabase, QGuiApplication, QIcon
-from PySide6.QtQml import QQmlApplicationEngine
-
-# Explicit imports so PyInstaller's PySide6 hooks collect the QML runtime
-# modules (Qt Quick, Qt Qml, Controls, Layouts, Shapes and Effects).
-import PySide6.QtQuick  # noqa: F401
-import PySide6.QtQml  # noqa: F401
-import PySide6.QtQuickControls2  # noqa: F401
-
-import core
-from backend import PuzzleBackend  # noqa: F401  (registers QObject types)
-from solver_worker import SolverWorker  # noqa: F401
+from backend import PuzzleBackend
 
 
-APP_TITLE = "Puzzle Solver — AI Sliding Puzzle Desktop"
+class Window(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.b = PuzzleBackend()
+        self.setWindowTitle("Puzzle Solver")
+        self._dialog = False
+        root = QVBoxLayout(self)
 
+        row = QHBoxLayout()
+        self.size = QSpinBox()
+        self.size.setRange(2, 10)
+        self.size.setValue(self.b.puzzleSize)
+        create = QPushButton("Create Puzzle")
+        self.shuffles = QSpinBox()
+        self.shuffles.setRange(1, 2000)
+        self.shuffles.setValue(self.b.shuffleMoves)
+        shuffle = QPushButton("Shuffle")
+        for w in (QLabel("Size"), self.size, create,
+                  QLabel("Shuffle moves"), self.shuffles, shuffle):
+            row.addWidget(w)
+        root.addLayout(row)
 
-def resource_path(relative):
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base, relative)
+        row = QHBoxLayout()
+        self.algorithm = QComboBox()
+        self.algorithm.addItems(self.b.algorithms)
+        self.algorithm.setCurrentIndex(self.b.algorithmIndex)
+        self.live = QCheckBox("Live visualization")
+        self.live.setChecked(self.b.liveVisualization)
+        self.delay = QSpinBox()
+        self.delay.setRange(10, 400)
+        self.delay.setValue(self.b.animationDelay)
+        self.nodeLimit = QSpinBox()
+        self.nodeLimit.setRange(1000, 5000000)
+        self.nodeLimit.setSingleStep(50000)
+        self.nodeLimit.setValue(self.b.nodeLimit)
+        for w in (QLabel("Algorithm"), self.algorithm, self.live,
+                  QLabel("Delay ms"), self.delay,
+                  QLabel("Node limit"), self.nodeLimit):
+            row.addWidget(w)
+        root.addLayout(row)
 
+        body = QHBoxLayout()
+        grid = QGridLayout()
+        self.cells = []
+        for r in range(10):
+            line = []
+            for c in range(10):
+                button = QPushButton()
+                button.setFixedSize(46, 36)
+                button.clicked.connect(
+                    lambda _checked=False, r=r, c=c: self.b.moveTile(r, c)
+                )
+                grid.addWidget(button, r, c)
+                line.append(button)
+            self.cells.append(line)
+        body.addLayout(grid)
 
-def _register_offscreen_fonts():
-    """Offscreen Qt has no system font database; load Segoe UI for captures.
+        info = QVBoxLayout()
+        self.status = QLabel()
+        self.nodes = QLabel()
+        self.moves = QLabel()
+        self.solvable = QLabel()
+        for label in (self.status, self.nodes, self.moves, self.solvable):
+            label.setWordWrap(True)
+            info.addWidget(label)
+        info.addStretch(1)
+        body.addLayout(info)
+        root.addLayout(body)
 
-    This is a no-op in a normal Windows session, where QGuiApplication finds
-    the installed fonts by itself.
-    """
-    if QFontDatabase.families():
-        return
-    fonts_dir = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts")
-    for name in (
-        "segoeui.ttf", "segoeuib.ttf", "segoeuii.ttf",
-        "seguisb.ttf", "segoeuil.ttf", "segoeuisl.ttf",
-    ):
-        path = os.path.join(fonts_dir, name)
-        if os.path.exists(path):
-            QFontDatabase.addApplicationFont(path)
+        row = QHBoxLayout()
+        self.solve = QPushButton("Solve Puzzle")
+        self.stop = QPushButton("Stop")
+        first = QPushButton("|<")
+        previous = QPushButton("<")
+        self.play = QPushButton("Play")
+        following = QPushButton(">")
+        last = QPushButton(">|")
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        for w in (self.solve, self.stop, first, previous, self.play,
+                  following, last, self.slider):
+            row.addWidget(w)
+        root.addLayout(row)
 
+        self.solution = QPlainTextEdit()
+        self.solution.setReadOnly(True)
+        self.solution.setMaximumHeight(110)
+        root.addWidget(self.solution)
 
-def create_application(argv=None):
-    """Build the QGuiApplication, QML engine and Python backend."""
-    app = QGuiApplication.instance() or QGuiApplication(argv or sys.argv)
-    _register_offscreen_fonts()
-    app.setWindowIcon(QIcon(resource_path(os.path.join("assets", "icon.ico"))))
-
-    backend = PuzzleBackend()
-    engine = QQmlApplicationEngine()
-    context = engine.rootContext()
-    context.setContextProperty("backend", backend)
-    context.setContextProperty("boardModel", backend.board_model)
-    context.setContextProperty("goalModel", backend.goal_model)
-
-    warnings = []
-
-    def collect(items):
-        warnings.extend(item.toString() for item in items)
-
-    engine.warnings.connect(collect)
-    engine.load(QUrl.fromLocalFile(resource_path(os.path.join("ui", "Main.qml"))))
-    if not engine.rootObjects():
-        message = "QML failed to load:\n" + "\n".join(warnings)
-        raise RuntimeError(message)
-
-    window = engine.rootObjects()[0]
-    window.setTitle(APP_TITLE)
-    backend.setWindow(window)
-    app.aboutToQuit.connect(backend.shutdown)
-    return app, engine, window, backend, warnings
-
-
-def run_selftest():
-    """Headless algorithm verification (no window required)."""
-    report = {
-        "python": sys.version.split()[0],
-        "frozen": bool(getattr(sys, "frozen", False)),
-        "checks": {},
-    }
-    try:
-        from PySide6.QtCore import qVersion
-
-        report["qt"] = qVersion()
-        app = QCoreApplication.instance() or QCoreApplication([])
-        report["checks"]["qt_application"] = app is not None
-
-        start = core.create_puzzle(3)
-        for _ in range(4):
-            start = core.shuffle_puzzle(start)
-        results = {}
-        for name, solver in core.SOLVERS.items():
-            events = list(solver(start, core.create_puzzle(3)))
-            last = events[-1]
-            reachable = last.get("solution") is not None
-            if reachable:
-                states = core.solution_states(start, last["solution"])
-                reachable = states[-1] == core.create_puzzle(3)
-            results[name] = {
-                "type": last["type"],
-                "checked_nodes": last["checked_nodes"],
-                "solution_reaches_goal": reachable,
-            }
-        report["checks"]["solvers"] = results
-        report["checks"]["solvability"] = core.is_solvable(
-            core.create_puzzle(3), core.create_puzzle(3)
+        create.clicked.connect(
+            lambda: (self.b.setPuzzleSize(self.size.value()),
+                     self.b.createPuzzle())
         )
-        report["ok"] = all(
-            item["solution_reaches_goal"] for item in results.values()
+        shuffle.clicked.connect(
+            lambda: (self.b.setShuffleMoves(self.shuffles.value()),
+                     self.b.shufflePuzzle())
         )
-    except Exception:
-        report["ok"] = False
-        report["error"] = traceback.format_exc()
+        self.algorithm.currentIndexChanged.connect(self.b.setAlgorithmIndex)
+        self.live.toggled.connect(self.b.setLiveVisualization)
+        self.delay.valueChanged.connect(self.b.setAnimationDelay)
+        self.nodeLimit.valueChanged.connect(self.b.setNodeLimit)
+        self.solve.clicked.connect(self.b.solve)
+        self.stop.clicked.connect(self.b.stopSolve)
+        first.clicked.connect(self.b.firstStep)
+        previous.clicked.connect(lambda: self.b.stepBy(-1))
+        self.play.clicked.connect(self.b.playPause)
+        following.clicked.connect(lambda: self.b.stepBy(1))
+        last.clicked.connect(self.b.lastStep)
+        self.slider.valueChanged.connect(self.b.seekStep)
 
-    path = os.path.join(tempfile.gettempdir(), "puzzle_solver_selftest.json")
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2)
-    return 0 if report["ok"] else 1
+        # Poll instead of binding to stateChanged: solver progress arrives from
+        # the worker thread, and widgets may only be touched on the UI thread.
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start(50)
+        self.refresh()
 
+    def keyPressEvent(self, event):
+        keys = {
+            Qt.Key.Key_Up: "up", Qt.Key.Key_Down: "down",
+            Qt.Key.Key_Left: "left", Qt.Key.Key_Right: "right",
+        }
+        if event.key() in keys:
+            self.b.moveBlank(keys[event.key()])
+        else:
+            super().keyPressEvent(event)
 
-def run_smoke_ui():
-    """Headless QML + backend check used to validate the frozen executable."""
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    report = {"frozen": bool(getattr(sys, "frozen", False)), "checks": {}}
-    try:
-        app, engine, window, backend, warnings = create_application([])
-        report["checks"]["qml_loaded"] = True
-        report["checks"]["qml_warnings"] = warnings
-        report["checks"]["board_tiles"] = backend.board_model.rowCount()
-        report["checks"]["goal_tiles"] = backend.goal_model.rowCount()
+    def refresh(self):
+        b = self.b
+        model = b.board_model
+        size = b.boardSize
+        board = [[""] * size for _ in range(size)]
+        for i in range(model.rowCount()):
+            index = model.index(i, 0)
+            if model.data(index, model.BLANK):
+                continue
+            r, c = model.data(index, model.ROW), model.data(index, model.COLUMN)
+            if 0 <= r < size and 0 <= c < size:
+                board[r][c] = str(model.data(index, model.NUMBER))
+        for r in range(10):
+            for c in range(10):
+                cell = self.cells[r][c]
+                cell.setVisible(r < size and c < size)
+                if r < size and c < size:
+                    cell.setText(board[r][c])
 
-        backend.setPuzzleSize(4)
-        backend.createPuzzle()
-        report["checks"]["4x4_board"] = backend.board_model.rowCount()
-        report["checks"]["4x4_goal"] = backend.goal_model.rowCount()
+        self.status.setText("Status: " + b.statusText)
+        self.nodes.setText("Checked nodes: " + str(b.checkedNodes))
+        self.moves.setText("Manual moves: " + str(b.manualMoves))
+        self.solvable.setText("Solvable: " + ("yes" if b.solvable else "no"))
+        text = b.solutionText
+        if self.solution.toPlainText() != text:
+            self.solution.setPlainText(text)
 
-        backend.setSetupMode(1)
-        report["checks"]["manual_cells"] = len(backend.manualCells)
-        backend.setSetupMode(0)
+        self.slider.blockSignals(True)
+        self.slider.setRange(0, max(0, b.playbackTotal))
+        self.slider.setValue(b.playbackStep)
+        self.slider.blockSignals(False)
+        self.solve.setEnabled(not b.busy)
+        self.stop.setEnabled(b.stopEnabled)
+        self.play.setText("Pause" if b.playing else "Play")
+        self.checkDialogs()
 
-        backend.setShuffleMoves(3)
-        backend.shufflePuzzle()
-        while backend._shuffling:
-            backend._shuffle_step()
-        report["checks"]["shuffle_moves"] = backend.manualMoves
-        report["checks"]["goal_is_original"] = (
-            backend._goal == core.create_puzzle(4)
-        )
-
-        backend.solve()
-        if backend._worker is not None:
-            backend._worker.run()          # drain deterministically
-            backend._thread.wait(2000)
-        report["checks"]["playback_available"] = backend.playbackAvailable
-        report["checks"]["playback_total"] = backend.playbackTotal
-        report["checks"]["solved_reaches_goal"] = (
-            backend._puzzle == backend._goal
-        )
-        backend.firstStep()
-        backend.lastStep()
-        report["checks"]["playback_seek"] = backend.playbackStep
-
-        report["checks"]["no_goal_buttons_in_backend"] = not any(
-            hasattr(backend, name)
-            for name in ("useCurrentAsGoal", "useCanonicalGoal", "restoreGoal")
-        )
-        report["ok"] = (
-            report["checks"]["board_tiles"] == 16
-            and report["checks"]["goal_tiles"] == 16
-            and report["checks"]["4x4_board"] == 16
-            and report["checks"]["manual_cells"] == 16
-            and report["checks"]["shuffle_moves"] == 3
-            and report["checks"]["goal_is_original"]
-            and report["checks"]["solved_reaches_goal"]
-            and report["checks"]["no_goal_buttons_in_backend"]
-            and not warnings
-        )
-        window.close()
-    except Exception:
-        report["ok"] = False
-        report["error"] = traceback.format_exc()
-
-    path = os.path.join(tempfile.gettempdir(), "puzzle_solver_smoke_ui.json")
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2)
-    return 0 if report["ok"] else 1
-
-
-def run_screenshot(argv):
-    """Launch, grab the window at a fixed size and exit (visual verification)."""
-    path = argv[0]
-    width = int(argv[1]) if len(argv) > 1 else 1648
-    height = int(argv[2]) if len(argv) > 2 else 900
-    app, engine, window, backend, warnings = create_application([])
-    window.resize(width, height)
-    print(f"Window: {window.width()}x{window.height()}")
-    if warnings:
-        print("QML warnings:", *warnings, sep="\n  ")
-
-    def grab():
-        image = app.primaryScreen().grabWindow(window.winId())
-        ok = image.save(path)
-        print(f"Screenshot: {path} ok={ok} size={image.width()}x{image.height()}")
-        app.quit()
-
-    QTimer.singleShot(900, grab)
-    return app.exec()
-
-
-def main():
-    argv = sys.argv[1:]
-    if "--selftest" in argv:
-        return run_selftest()
-    if "--smoke-ui" in argv:
-        return run_smoke_ui()
-    if "--screenshot" in argv:
-        index = argv.index("--screenshot")
-        return run_screenshot(argv[index + 1:])
-
-    app, engine, window, backend, warnings = create_application(sys.argv)
-    if warnings:
-        print("QML warnings:", *warnings, sep="\n  ")
-    return app.exec()
+    def checkDialogs(self):
+        if self._dialog:
+            return
+        self._dialog = True
+        if self.b.confirmVisible:
+            answer = QMessageBox.question(
+                self, self.b.confirmTitle, self.b.confirmText,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self.b.confirmSolve()
+            else:
+                self.b.cancelSolve()
+        elif self.b.alertVisible:
+            QMessageBox.information(self, "Puzzle Solver", self.b.alertText)
+            self.b.dismissAlert()
+        self._dialog = False
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    app = QApplication(sys.argv)
+    window = Window()
+    window.show()
+    app.aboutToQuit.connect(window.b.shutdown)
+    sys.exit(app.exec())
