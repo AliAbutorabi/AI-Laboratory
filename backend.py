@@ -34,11 +34,6 @@ SETUP_MODES = ("standard", "manual", "random")
 SETUP_MODE_LABELS = ["Standard Mode", "Manual Mode", "Random Mode"]
 ALGORITHMS = list(core.ALGORITHMS)
 
-GOAL_DESCRIPTION = (
-    "Green tiles already match the goal. The goal is a snapshot of the board "
-    "taken when the puzzle was created."
-)
-
 # Validation ranges are kept here so the QML controls and the Python engine
 # can never disagree about what a legal setting is.
 SHUFFLE_MIN, SHUFFLE_MAX = 1, 2000
@@ -270,7 +265,6 @@ _DEFAULTS = (
     ("busy", False),
     ("stopEnabled", False),
     ("boardExpanded", False),
-    ("goalDescription", GOAL_DESCRIPTION),
     ("alertText", ""),
     ("alertVisible", False),
     ("confirmVisible", False),
@@ -313,7 +307,6 @@ class PuzzleBackend(QObject):
     busy = state_property(bool, "busy", stateChanged)
     stopEnabled = state_property(bool, "stopEnabled", stateChanged)
     boardExpanded = state_property(bool, "boardExpanded", stateChanged)
-    goalDescription = state_property(str, "goalDescription", stateChanged)
     alertText = state_property(str, "alertText", stateChanged)
     alertVisible = state_property(bool, "alertVisible", stateChanged)
     confirmVisible = state_property(bool, "confirmVisible", stateChanged)
@@ -613,6 +606,9 @@ class PuzzleBackend(QObject):
     def solve(self):
         if self._busy:
             return
+        # The Solve Puzzle button starts a fresh search: clear the manual-moves
+        # counter that was accumulated while shuffling / moving tiles by hand.
+        self._manualMoves = 0
         if not core.is_solvable(self._puzzle, self._goal):
             self._pending_solve = True
             self._show_confirm(

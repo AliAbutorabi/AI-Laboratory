@@ -39,6 +39,22 @@ class SolverWorker(QObject):
         self.visualize = visualize
         self.frame_delay = max(1, frame_delay_ms) / 1000.0
 
+    def _pause_for_frame(self):
+        """Yield long enough for the UI thread to show the frame just emitted.
+
+        Short slices keep ``requestInterruption()`` (the Stop button) responsive
+        even when the animation delay is set to its maximum.
+        """
+        deadline = time.monotonic() + self.frame_delay
+        thread = self.thread()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(remaining, 0.005))
+            if thread is not None and thread.isInterruptionRequested():
+                return
+
     @Slot()
     def run(self):
         generator = None
@@ -69,11 +85,18 @@ class SolverWorker(QObject):
                         return
                     now = time.monotonic()
                     if now - last_frame >= self.frame_delay:
-                        last_frame = now
                         # In fast mode no grid is transferred to the UI thread.
                         self.progress.emit(
                             event["state"] if self.visualize else None, checked
                         )
+                        # The search is pure Python, so without yielding here
+                        # the worker keeps the GIL until it finishes and the UI
+                        # thread can never deliver the queued model/property
+                        # notifications.  Pausing after each streamed frame is
+                        # what makes the explored nodes visible while solving.
+                        if self.visualize:
+                            self._pause_for_frame()
+                        last_frame = time.monotonic()
                     continue
 
                 if kind == "solved":

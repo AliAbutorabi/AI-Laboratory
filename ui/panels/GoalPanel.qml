@@ -4,10 +4,11 @@ import "../components"
 
 /* Goal-state area.  The goal is a fixed snapshot of the board the user
    created, so there are deliberately no "set goal" buttons here: the card
-   simply shows the target, the real solvability result and an explanation. */
+   simply shows the target and the real solvability result.  The strip below
+   the card carries the application status messages. */
 Item {
     id: root
-    property real infoHeight: 54
+    property real infoHeight: 62
     property real goalPx: Math.min(goalCard.width * 0.62,
                                   goalCard.height * 0.54, 290)
 
@@ -63,8 +64,9 @@ Item {
         y: root.height - root.infoHeight
         width: root.width
         height: root.infoHeight
-        text: backend.goalDescription
-        fontSize: 12
+        text: backend.statusText
+        fontSize: 15
+        textColor: Theme.text
         padding: 9
     }
 }

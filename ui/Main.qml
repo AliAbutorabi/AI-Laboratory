@@ -56,14 +56,6 @@ ApplicationWindow {
         }
     }
 
-    function statusColor(kind) {
-        if (kind === "success") return Theme.success;
-        if (kind === "error") return Theme.dangerText;
-        if (kind === "warning") return Theme.orange;
-        if (kind === "working") return Theme.purple;
-        return Theme.success;
-    }
-
     Item {
         id: appRoot
         anchors.fill: parent
@@ -156,25 +148,6 @@ ApplicationWindow {
                             Layout.preferredHeight: 158
                             Layout.minimumHeight: 150
                         }
-                    }
-                }
-
-                Row {
-                    x: 24
-                    y: body.height - 21
-                    spacing: 8
-                    Rectangle {
-                        width: 8; height: 8
-                        radius: 4
-                        color: win.statusColor(backend.statusKind)
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: backend.statusText
-                        color: Theme.textMuted
-                        font.pixelSize: Theme.smallSize
-                        font.family: Theme.fontFamily
-                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
             }

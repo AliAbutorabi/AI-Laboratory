@@ -32,39 +32,6 @@ ColumnLayout {
         color: Theme.divider
     }
 
-    Text {
-        text: "Default algorithm"
-        color: Theme.text
-        font.pixelSize: 13
-        font.bold: true
-        font.family: Theme.fontFamily
-    }
-    CustomDropdown {
-        Layout.fillWidth: true
-        Layout.topMargin: 9
-        options: backend.algorithms
-        currentIndex: backend.algorithmIndex
-        enabled: !backend.busy
-        onOptionSelected: function(index) { backend.setAlgorithmIndex(index) }
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.topMargin: 8
-        text: "A* is recommended for boards 4 x 4 and larger."
-        color: Theme.textFaint
-        font.pixelSize: Theme.tinySize
-        font.family: Theme.fontFamily
-        wrapMode: Text.Wrap
-    }
-
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        Layout.topMargin: 16
-        Layout.bottomMargin: 14
-        color: Theme.divider
-    }
-
     Row {
         Layout.fillWidth: true
         Layout.preferredHeight: 26
@@ -149,24 +116,6 @@ ColumnLayout {
         step: 50000
         enabled: !backend.busy
         onValueEdited: function(v) { backend.setNodeLimit(v) }
-    }
-    Text {
-        Layout.fillWidth: true
-        Layout.topMargin: 8
-        text: "Shuffle moves"
-        color: Theme.text
-        font.pixelSize: 13
-        font.bold: true
-        font.family: Theme.fontFamily
-    }
-    NumericInput {
-        Layout.fillWidth: true
-        Layout.topMargin: 9
-        value: backend.shuffleMoves
-        minValue: 1
-        maxValue: 2000
-        enabled: !backend.busy
-        onValueEdited: function(v) { backend.setShuffleMoves(v) }
     }
     SecondaryButton {
         Layout.fillWidth: true
